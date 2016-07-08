@@ -1,0 +1,39 @@
+[logging]
+ default                = FILE:/var/log/krb5libs.log
+ kdc                    = FILE:/var/log/krb5kdc.log
+ admin_server           = FILE:/var/log/kadmind.log
+
+[libdefaults]
+ default_realm          = {{ sssd_realm | upper }} 
+ dns_lookup_realm       = true
+ dns_lookup_kdc         = true
+ ticket_lifetime        = 1d
+ renew_lifetime         = 7d
+ forwardable            = true
+ proxiable              = true
+
+[realms]
+ {{ sssd_realm | upper }} = {
+        kdc             = {{ sssd_dc }} 
+        admin_server    = {{ sssd_dc }} 
+ }
+
+[domain_realm]
+ .{{ sssd_realm | lower }}       = {{ sssd_realm | upper }} 
+{{ sssd_realm | lower }}         = {{ sssd_realm | upper }} 
+ .{{ sssd_realm.split('.')[-2] | lower }}.{{ sssd_realm.split('.')[-1] | lower }}           = {{ sssd_realm | upper }} 
+{{ sssd_realm.split('.')[-2] | lower }}.{{ sssd_realm.split('.')[-1] | lower }}             = {{ sssd_realm | upper }}
+
+[kdc]
+profile                 = /var/kerberos/krb5kdc/kdc.conf
+
+[appdefaults]
+pam = {
+        debug           = false
+        ticket_lifetime = 1d
+        renew_lifetime  = 7d
+        forwardable     = true
+        krb4_convert    = false
+	    ignore_k5login  = true
+}
+

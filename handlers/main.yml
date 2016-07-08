@@ -1,0 +1,12 @@
+---
+# handlers file for sssd
+- name: restart sssd
+  service:
+    name: sssd
+    state: restarted
+
+- name: restart ntpd
+  service:
+    name: ntpd
+    state: restarted
+  when: not ntpd_service_started.changed

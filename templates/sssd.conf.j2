@@ -1,0 +1,32 @@
+[sssd] 
+domains = {{ sssd_realm | lower }} 
+subdomains_provider = none 
+config_file_version = 2 
+services = nss, pam, ssh, sudo  
+  
+[domain/{{ sssd_realm | lower }}] 
+ad_domain = {{ sssd_realm | lower }} 
+krb5_realm = {{ sssd_realm | upper }} 
+realmd_tags = manages-system joined-with-samba 
+cache_credentials = True 
+id_provider = ad 
+krb5_store_password_if_offline = True 
+default_shell = /bin/bash 
+ldap_id_mapping = True 
+use_fully_qualified_names = False 
+fallback_homedir = /home/%d/%u 
+access_provider = ad 
+ignore_group_members = True 
+ldap_idmap_range_min = 1000 
+ldap_idmap_range_size = 2000000 
+ldap_idmap_autorid_compat = True 
+  
+[ssh] 
+  
+[pam] 
+offline_credentials_expiration = 2 
+offline_failed_login_attempts = 3 
+offline_failed_login_delay = 5 
+  
+[sudo] 
+[nss] 

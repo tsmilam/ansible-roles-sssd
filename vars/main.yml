@@ -1,0 +1,5 @@
+---
+# vars file for sssd
+sssd_realm: domain.example.org
+sssd_dc: dc01.example.org
+

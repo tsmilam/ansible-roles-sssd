@@ -1,0 +1,106 @@
+---
+# tasks file for sssd
+- name: Verify this is RHEL or CentOS 7 
+  assert:
+    that:
+      ansible_os_family == "RedHat" and ansible_distribution_major_version == "7"
+
+
+- name: install packages needed for SSSD to work
+  yum: name={{ item }} state=installed
+  with_items:
+   - realmd 
+   - oddjob 
+   - oddjob-mkhomedir 
+   - sssd 
+   - nss-pam-ldapd 
+   - pam_krb5 
+   - adcli
+   - python-pip
+  tags:
+  - packages
+
+- name: install pexpect from pip 
+  shell: /bin/bash -c "pip install pexpect"
+
+- name: Test if server is already a domain member
+  shell: "realm list"
+  register: domain_membership_test
+  ignore_errors: True
+   #- sssd_check
+
+- name: create hostname-USER AD group 
+  expect:
+    command: adcli create-group {{ inventory_hostname_short }}-USER -U {{ name }} --domain={{ sssd_realm }} --domain-ou="OU=Unix,OU=Servers,OU=Computer Accounts,DC={{ sssd_realm.split('.')[0] }},DC={{ sssd_realm.split('.')[1] }},DC={{ sssd_realm.split('.')[2] }}" 
+    responses:
+      Password for *: "{{ your_password }}"
+  ignore_errors: True
+
+- name: create hostname-ROOT security group
+  expect:
+    command: adcli create-group {{ inventory_hostname_short }}-ROOT -U {{ name }} --domain={{ sssd_realm }} --domain-ou="OU=Unix,OU=Servers,OU=Computer Accounts,DC={{ sssd_realm.split('.')[0] }},DC={{ sssd_realm.split('.')[1] }},DC={{ sssd_realm.split('.')[2] }}"
+    responses:
+      Password for *: "{{ your_password }}"
+  ignore_errors: True
+
+- name: discover realm
+  shell: /bin/bash -c "realm discover {{ sssd_realm | upper }}"
+
+- name: join the server to domain
+  when: domain_membership_test.stdout.find("{{ sssd_realm | upper }}") == -1
+  expect: 
+    command: /bin/bash -c "realm join {{ sssd_realm | upper }} -U {{ name }}@{{ sssd_realm | upper }}"
+    responses:
+      Password for *: "{{ your_password }}"
+
+- name: Running authconfig (enable pam, krb5, sssd auth, auto homedir create)
+  command: authconfig --updateall --enablepamaccess --enablekrb5 --enablesssd --enablesssdauth --enablemkhomedir --nostart
+
+- name: Configure /etc/krb5.conf
+  template: 
+    src=templates/krb5.conf.j2 
+    dest=/etc/krb5.conf 
+    owner=root 
+    group=root
+    mode=0644
+
+- name: Configure /etc/sssd/sssd.conf
+  template:
+    src=templates/sssd.conf.j2 
+    dest=/etc/sssd/sssd.conf 
+    owner=root 
+    group=root
+    mode=0600
+  notify:
+    - restart sssd
+
+- name: Running realm permit for authorized groups 
+  command: realm permit --groups "unix admins" "{{ ansible_hostname }}-USER" "{{ ansible_hostname }}-ROOT"
+  notify:
+    - restart sssd
+
+- name: Enable sssd on boot 
+  service: 
+    name: sssd
+    enabled: yes 
+
+- name: Create sudoers file backup
+  command: cp -f /etc/sudoers /etc/sudoers.bak
+
+- name: Add admins AD group to sudoers
+  lineinfile: 
+    dest: /etc/sudoers 
+    line: '%unix\x20admins ALL=(ALL) NOPASSWD:ALL'
+    state: present 
+    regexp: '^%unix' 
+    create: yes
+    validate: 'visudo -cf %s'
+
+- name: Add server local AD group to sudoers if not already present
+  lineinfile: 
+    dest: /etc/sudoers 
+    state: present 
+    regexp: '^%{{ ansible_hostname }}-ROOT' 
+    line: '%{{ ansible_hostname }}-ROOT ALL=(ALL) NOPASSWD:ALL'
+    create: yes
+    validate: 'visudo -cf %s'
